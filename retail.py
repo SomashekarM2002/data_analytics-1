@@ -1,92 +1,45 @@
 import pandas as pd
-from datetime import datetime
 
 # -------------------------------
 # 1. Load Dataset
 # -------------------------------
 
-file_path = "C:/Users/Somashekar M/Downloads/sales_data.csv"   # Your uploaded file
+file_path = "C:/Users/Somashekar M/Downloads/Sales_data.csv"
 data = pd.read_csv(file_path)
 
 print("Data Loaded Successfully!")
 print(data.head())
 
-
 # -------------------------------
-# 2. Convert Date Column
-# -------------------------------
-
-data['sale_date'] = pd.to_datetime(
-    data['sale_date'],
-    dayfirst=True,
-    errors='coerce'
-)
-
-
-# -------------------------------
-# 3. Set Reference Date (Today)
+# 2. Clean Column Names
 # -------------------------------
 
-today = datetime(2026, 1, 29)
-
+data.columns = data.columns.str.strip().str.lower()
 
 # -------------------------------
-# 4. Calculate RFM Values
+# 3. Create RFM Table from Your Data
 # -------------------------------
 
-rfm = data.groupby('customer_id').agg({
+rfm = data[['customer_id','signup_days_ago','total_transactions','total_spend']].copy()
 
-    'sale_date': lambda x: (today - x.max()).days,  # Recency
-    'sale_id': 'count',                             # Frequency
-    'amount': 'sum'                                 # Monetary
+# rename as RFM
+rfm.columns = ['customer_id','Recency','Frequency','Monetary']
 
-})
-
-
-# Rename Columns
-rfm.columns = ['Recency', 'Frequency', 'Monetary']
-
+rfm = rfm.set_index('customer_id')
 
 print("\nRFM Table Created!")
 print(rfm.head())
 
-
 # -------------------------------
-# 5. Assign RFM Scores (1 to 5)
-# -------------------------------
-
-# -------------------------------
-# Safe RFM Scoring (No Errors)
+# 4. RFM Scoring
 # -------------------------------
 
-rfm['R_Score'] = pd.qcut(
-    rfm['Recency'],
-    q=5,
-    duplicates='drop'
-).cat.codes + 1
+rfm['R_Score'] = pd.qcut(rfm['Recency'], q=5, duplicates='drop').cat.codes + 1
+rfm['F_Score'] = pd.qcut(rfm['Frequency'], q=5, duplicates='drop').cat.codes + 1
+rfm['M_Score'] = pd.qcut(rfm['Monetary'], q=5, duplicates='drop').cat.codes + 1
 
-
-rfm['F_Score'] = pd.qcut(
-    rfm['Frequency'],
-    q=5,
-    duplicates='drop'
-).cat.codes + 1
-
-
-rfm['M_Score'] = pd.qcut(
-    rfm['Monetary'],
-    q=5,
-    duplicates='drop'
-).cat.codes + 1
-
-
-# Reverse Recency Score (Lower recency = better customer)
+# reverse recency (lower days = better customer)
 rfm['R_Score'] = 6 - rfm['R_Score']
-
-
-# -------------------------------
-# 6. Combine Scores
-# -------------------------------
 
 rfm['RFM_Score'] = (
     rfm['R_Score'].astype(str) +
@@ -94,81 +47,72 @@ rfm['RFM_Score'] = (
     rfm['M_Score'].astype(str)
 )
 
-
-print("\nRFM Scores Assigned!")
-print(rfm[['R_Score','F_Score','M_Score','RFM_Score']].head())
-
-
 # -------------------------------
-# 7. Customer Segmentation
+# 5. Customer Segmentation
 # -------------------------------
 
 def segment_customer(row):
-
     score = row['RFM_Score']
 
     if score >= '455':
         return 'Champions'
-
     elif score >= '344':
         return 'Loyal Customers'
-
     elif score >= '233':
         return 'Potential Loyalist'
-
     elif score >= '122':
         return 'Needs Attention'
-
     else:
         return 'Lost Customers'
 
-
 rfm['Segment'] = rfm.apply(segment_customer, axis=1)
-
 
 print("\nCustomer Segments Created!")
 print(rfm[['RFM_Score','Segment']].head())
 
-
 # -------------------------------
-# 8. Sort by Best Customers
-# -------------------------------
-
-rfm_sorted = rfm.sort_values(by='RFM_Score', ascending=False)
-
-
-# -------------------------------
-# 9. Save Output File
+# 6. Save Output
 # -------------------------------
 
-# Save Output File
-output_file = "rfm_output.csv"
+rfm.to_csv("rfm_output.csv")
 
-rfm_sorted.to_csv(output_file, index=True)
-
-print("File saved successfully as:", output_file)
-
-
-rfm_sorted.to_csv(output_file)
-
-
-print("\nRFM Analysis Completed Successfully!")
-print("Output saved as:", output_file)
-
-
-# -------------------------------
-# 10. Segment Summary
-# -------------------------------
-
-segment_summary = rfm['Segment'].value_counts()
+print("\n✅ RFM Analysis Completed Successfully!")
 
 print("\nCustomer Segment Summary:")
-print(segment_summary)
+print(rfm['Segment'].value_counts())
 
+print("\nTop 10 Customers:")
+print(rfm.sort_values(by='RFM_Score', ascending=False).head(10))
 
 # -------------------------------
-# 11. Top 10 Customers
+# 7. Visualization
 # -------------------------------
 
-print("\nTop 10 High Value Customers:")
-print(rfm_sorted.head(10))
+import matplotlib.pyplot as plt
+
+# Customer segment distribution
+plt.figure()
+rfm['Segment'].value_counts().plot(kind='bar')
+plt.title("Customer Segmentation Distribution")
+plt.xlabel("Segment")
+plt.ylabel("Number of Customers")
+plt.xticks(rotation=45)
+plt.show()
+
+
+# Recency vs Monetary scatter plot
+plt.figure()
+plt.scatter(rfm['Recency'], rfm['Monetary'])
+plt.title("Recency vs Monetary")
+plt.xlabel("Recency")
+plt.ylabel("Monetary")
+plt.show()
+
+
+# Frequency distribution
+plt.figure()
+rfm['Frequency'].plot(kind='hist')
+plt.title("Frequency Distribution")
+plt.xlabel("Frequency")
+plt.show()
+
